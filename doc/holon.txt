@@ -1,0 +1,751 @@
+*holon.txt*    Neovim plugin for Zettelkasten workflow
+
+Author: haruki
+License: MIT
+
+==============================================================================
+CONTENTS                                                    *holon-contents*
+
+  1. Introduction .......................... |holon-introduction|
+  2. Setup ................................. |holon-setup|
+  3. Configuration ......................... |holon-configuration|
+  4. Commands .............................. |holon-commands|
+  5. Pickers ............................... |holon-pickers|
+  6. Picker Common Keybindings ............. |holon-picker-common|
+  7. Link Navigation ....................... |holon-links|
+  8. Link Browser .......................... |holon-link-browser|
+  9. Note Format ........................... |holon-note-format|
+  10. Templates ............................ |holon-templates|
+  11. GTD Board ............................ |holon-gtd|
+  12. Ignoring Files ....................... |holon-holonignore|
+  13. Lua API .............................. |holon-api|
+
+==============================================================================
+1. INTRODUCTION                                         *holon-introduction*
+
+holon.nvim is a Neovim plugin for Zettelkasten note-taking. It provides note
+searching, creation, backlink discovery, index browsing, journal management,
+a GTD board, and a link browser. No external plugin dependencies required.
+
+Features: ~
+  - Full-text search and file-based note discovery
+  - Wiki-style `[[target|title]]` and Markdown `[title](target.md)` links
+  - Backlink detection via ripgrep
+  - Index note navigation with linked-note drill-down
+  - Journal entry management
+  - Tag and type filtering
+  - Smart `gd` mapping for link following with LSP fallback
+  - Template-based note creation with UUID generation
+  - GTD board with status/horizon views
+  - Link browser for graph exploration
+
+Requirements: ~
+  - Neovim >= 0.10
+  - fd (https://github.com/sharkdp/fd)
+  - ripgrep (https://github.com/BurntSushi/ripgrep)
+
+==============================================================================
+2. SETUP                                                *holon-setup*
+
+                                                        *holon.setup()*
+Setup with `require("holon").setup()`: >lua
+
+  require("holon").setup({
+    notes_path = vim.fn.expand("~/notes"),
+  })
+<
+
+==============================================================================
+3. CONFIGURATION                                        *holon-configuration*
+
+All configuration options and their default values:
+
+                                                        *holon-config-notes_path*
+notes_path ~
+  (string, default: `vim.fn.expand("~/notes")`)
+  Path to the Zettelkasten notes directory. Required.
+
+                                                        *holon-config-directories*
+directories ~
+  (table)
+  Subdirectory structure relative to `notes_path`.
+  Note types are derived from these keys (excluding `journal`).
+  Default: >lua
+    {
+      permanent = "Notes/Permanent",
+      fleeting = "Notes/Fleeting",
+      literature = "Notes/Literature",
+      project = "Notes/Project",
+      index = "Notes/Permanent",
+      structure = "Notes/Permanent",
+      journal = "journal",
+    }
+<
+
+                                                        *holon-config-templates_path*
+templates_path ~
+  (string, default: `"templates"`)
+  Template directory relative to `notes_path`.
+
+                                                        *holon-config-extension*
+extension ~
+  (string, default: `".md"`)
+  File extension for notes.
+
+                                                        *holon-config-types*
+types ~
+  Note types are automatically derived from |holon-config-directories| keys
+  (excluding `journal`). No separate configuration needed. The type list is
+  sorted alphabetically and used in the type filter picker and GTD promote.
+
+                                                        *holon-config-filename_style*
+filename_style ~
+  (string, default: `"uuid"`)
+  How filenames are determined when creating notes.
+  `"uuid"` uses an auto-generated UUID v4.
+  `"manual"` asks the user for a filename before each note creation.
+  The filename input is required; empty input cancels creation.
+  Template variables (including `${UUID}`) are always substituted
+  regardless of this setting.
+
+                                                        *holon-config-default_link_format*
+default_link_format ~
+  (string, default: `"wiki"`)
+  Link format for inserted links. `"wiki"` for `[[target|title]]`,
+  `"markdown"` for `[title](target.md)`.
+
+                                                        *holon-config-timezone_offset*
+timezone_offset ~
+  (number|nil, default: `nil`)
+  Timezone offset from UTC in hours. `nil` uses system local time.
+  Examples: `9` = JST, `-5` = EST, `0` = UTC.
+
+                                                        *holon-config-picker*
+picker ~
+  (table)
+  Picker display settings.
+
+  Fields: ~
+    {show_icons}      (boolean, default: `true`)
+                      Show type icons in picker results.
+
+    {show_tags}       (boolean, default: `true`)
+                      Show tags in picker results.
+
+    {initial_mode}    (string, default: `"insert"`)
+                      Initial mode for pickers.
+
+    {layout_config}   (table)
+                      Layout configuration (width, height, preview_width).
+
+                                                        *holon-config-icons*
+icons ~
+  (table)
+  Nerd Font icons and highlight groups per note type.
+  Each entry: `{ icon = "...", hl = "HighlightGroup" }`.
+
+  Default highlight groups: ~
+    `HolonPermanent`   links to `DiagnosticInfo`
+    `HolonFleeting`    links to `DiagnosticHint`
+    `HolonLiterature`  links to `DiagnosticWarn`
+    `HolonProject`     links to `DiagnosticOk`
+    `HolonIndex`       links to `Special`
+    `HolonStructure`   links to `Identifier`
+    `HolonDefault`     links to `Normal`
+
+                                                        *holon-config-mappings*
+mappings ~
+  (table)
+  Keybindings inside the notes picker. Maps keys to action names.
+
+  Available actions: ~
+    `create_note`          Open the template picker to create a new note.
+    `show_backlinks`       Show backlinks for the selected note.
+    `show_forward_links`   Show forward links from the selected note.
+    `insert_link`          Insert a link to the selected note at cursor.
+    `filter_by_type`       Open the type filter popup.
+    `filter_by_tag`        Open the tag filter picker.
+
+  Default: >lua
+    {
+      i = {
+        ["<C-n>"] = "create_note",
+        ["<C-b>"] = "show_backlinks",
+        ["<C-f>"] = "show_forward_links",
+        ["<C-l>"] = "insert_link",
+        ["<C-t>"] = "filter_by_type",
+        ["<C-g>"] = "filter_by_tag",
+      },
+      n = {
+        ["n"] = "create_note",
+        ["b"] = "show_backlinks",
+        ["f"] = "show_forward_links",
+        ["l"] = "insert_link",
+        ["t"] = "filter_by_type",
+        ["g"] = "filter_by_tag",
+      },
+    }
+<
+
+                                                        *holon-config-gtd*
+gtd ~
+  (table)
+  GTD board settings.
+
+  Fields: ~
+    {statuses}      (table) Status progression order for h/l navigation.
+                    Default:
+                    `{"inbox","todo","inprogress","waiting","delegate","done"}`
+
+    {status_icons}  (table) Icons and highlight groups per status.
+                    Each entry: `{ icon = "...", hl = "HighlightGroup" }`.
+
+    {blocked_icon}  (string, default: `"🔒"`)
+                    Indicator for blocked tasks.
+
+    {layout}        (table) Board layout settings.
+                    `width` (number, default: `0.9`) Editor width ratio.
+                    `height` (number, default: `0.8`) Editor height ratio.
+                    `timeline_min_width` (number, default: `30`) Hide
+                      timeline if narrower than this.
+                    `preview_ratio` (number, default: `0.45`) Preview
+                      panel height ratio.
+
+==============================================================================
+4. COMMANDS                                             *holon-commands*
+
+  `:Holon`                       Open notes picker.
+  `:HolonNew`                    Create new note from template.
+  `:HolonGrep` [query]           Grep notes. Optional initial query.
+  `:HolonBacklinks`              Show backlinks to current note.
+  `:HolonLinks`                  Show forward links from current note.
+  `:HolonIndexes`                Browse index notes.
+  `:HolonJournal`                Browse journal entries.
+  `:HolonTags`                   Filter notes by tag.
+  `:HolonTypes`                  Filter notes by type.
+  `:HolonFollow`                 Follow link under cursor.
+  `:HolonToday`                  Open or create today's journal entry.
+  `:HolonGtd`                    Open GTD board.
+  `:HolonBrowse`                 Open link browser.
+  `:HolonOrphans`                Find orphan notes with no links.
+
+==============================================================================
+5. PICKERS                                              *holon-pickers*
+
+                                                        *holon-picker-notes*
+Notes ~
+  Main picker for finding and opening notes. Supports tag and type filtering
+  via the tags/types pickers.
+
+  Keybindings are configurable via |holon-config-mappings|.
+
+  Default bindings: ~
+    `<CR>`      Open note
+    `<C-n>`     Create new note (insert mode)
+    `<C-b>`     Show backlinks (insert mode)
+    `<C-f>`     Show forward links (insert mode)
+    `<C-l>`     Insert link at cursor (insert mode)
+    `<C-t>`     Filter by type (insert mode)
+    `<C-g>`     Filter by tag (insert mode)
+    `n`         Create new note (normal mode)
+    `b`         Show backlinks (normal mode)
+    `f`         Show forward links (normal mode)
+    `l`         Insert link at cursor (normal mode)
+    `t`         Filter by type (normal mode)
+    `g`         Filter by tag (normal mode)
+    `<BS>`      Return to tag/type picker (normal, when filtered)
+
+                                                        *holon-picker-grep*
+Grep ~
+  Live grep through note contents using ripgrep.
+  Respects `.holonignore` for file exclusion.
+  Preview scrolls to matched line with search highlighting.
+
+                                                        *holon-picker-backlinks*
+Backlinks ~
+  Show notes that link to a specific note. Works with both UUID-based and
+  non-UUID filenames (e.g., journal entries like `2024-01-15.md`).
+
+  When invoked without arguments, uses the current buffer's UUID or filename.
+
+                                                        *holon-picker-indexes*
+Indexes ~
+  Browse index-type notes with drill-down into linked notes.
+
+  Bindings: ~
+    `<CR>`      Open index note
+    `<Tab>`     Show notes linked from the selected index
+
+                                                        *holon-picker-index-links*
+Index Links ~
+  Notes linked from a specific index note. Shown after pressing `<Tab>` in
+  the indexes picker.
+
+  Bindings: ~
+    `<CR>`      Open linked note
+    `<BS>`      Return to indexes picker (normal mode)
+
+                                                        *holon-picker-journal*
+Journal ~
+  Browse journal entries sorted by date.
+
+  Bindings: ~
+    `<CR>`      Open journal entry
+    `<C-n>`     Create today's journal entry (insert mode)
+
+                                                        *holon-picker-tags*
+Tags ~
+  List all tags with note counts. Selecting a tag opens the notes picker
+  filtered to that tag.
+
+                                                        *holon-picker-types*
+Types ~
+  List configured note types. Selecting a type opens the notes picker
+  filtered to that type.
+
+                                                        *holon-picker-orphans*
+Orphans ~
+  Find notes that have no incoming or outgoing links. Supports multi-select
+  with `<Tab>` and batch delete with `d`.
+
+==============================================================================
+6. PICKER COMMON KEYBINDINGS                            *holon-picker-common*
+
+All pickers share the following keybindings.
+
+Insert mode: ~
+  `<C-j>` / `<C-n>`    Next item
+  `<C-k>` / `<C-p>`    Previous item
+  `<CR>`                Move focus to results list
+  `<Esc>`               Switch to normal mode (stay in search)
+
+Normal mode: ~
+  `j` / `k`             Move cursor
+  `<CR>`                Open selected
+  `/` or `i`            Switch to insert mode (search)
+  `<Tab>`               Toggle mark (when multi-select enabled)
+  `<C-d>` / `<C-u>`    Scroll preview
+  `q`                   Close picker
+
+==============================================================================
+7. LINK NAVIGATION                                      *holon-links*
+
+                                                        *holon-gd*
+Smart gd ~
+  For markdown files inside `notes_path`, `gd` is automatically remapped to
+  follow links. The mapping persists even after LSP attaches.
+
+  Resolution order: ~
+    1. Detect link at cursor position
+    2. If link found, resolve the target:
+       a. Relative to the current file directory
+       b. Relative to `notes_path`
+       c. Search configured subdirectories
+       d. `fd` fallback search across `notes_path`
+    3. If no link found, fall back to LSP `textDocument/definition`
+    4. If LSP unavailable, fall back to normal `gd`
+
+  Supported link patterns: ~
+    `[[target|title]]`    Wiki-style with display text
+    `[[target]]`          Wiki-style without display text
+    `[title](target.md)`  Markdown-style (local files only)
+
+  External URLs (`https://...`) in markdown links are skipped.
+
+  If a link target cannot be resolved to an existing file, a warning is
+  shown and `gd` does not fall through to LSP.
+
+                                                        *holon-follow*
+HolonFollow ~
+  The `:HolonFollow` command and `follow_link_under_cursor()` function
+  provide the same link-following behavior without LSP fallback.
+
+==============================================================================
+8. LINK BROWSER                                         *holon-link-browser*
+
+The link browser provides a file-browser-style link navigator for exploring
+the note graph. Open with `:HolonBrowse`.
+
+Three viewing modes: ~
+  `forward`      Notes linked FROM the current note
+  `backlinks`    Notes linking TO the current note
+  `tags`         Notes sharing tags with the current note
+
+Keybindings: ~
+  `j` / `k`            Move cursor
+  `<CR>`               Dive into selected note (navigate forward)
+  `o`                  Open note in editor
+  `b`                  Switch to backlinks mode
+  `f`                  Switch to forward links mode
+  `t`                  Switch to shared tags mode
+  `-` / `<BS>`         Go back in history
+  `<C-d>` / `<C-u>`   Scroll
+  `q` / `<Esc>`        Close browser
+
+==============================================================================
+9. NOTE FORMAT                                          *holon-note-format*
+
+Notes use YAML frontmatter: >yaml
+
+  ---
+  title: Note Title
+  created: 2024-01-01T12:00:00
+  lastmod: 2024-01-01T12:00:00
+  url: null
+  type: permanent
+  tags:
+      - topic
+      - subtopic
+  ---
+
+  Note content here...
+<
+
+                                                        *holon-note-types*
+Supported types: ~
+  `permanent`    Core knowledge notes
+  `fleeting`     Quick, temporary notes
+  `literature`   Papers and publications
+  `project`      Project documentation
+  `index`        Navigation entry points
+  `structure`    Organizational notes
+
+                                                        *holon-multiple-types*
+Multiple types ~
+  Notes can have multiple types using YAML list syntax: >yaml
+
+  type:
+      - project
+      - index
+<
+  Such notes appear in searches for any of their types.
+
+==============================================================================
+10. TEMPLATES                                           *holon-templates*
+
+Place template files in `templates_path` (default: `templates/` under
+`notes_path`). When creating a note, select a template from the picker and
+optionally provide a title.
+
+Template variables: ~
+
+  `${UUID}`              UUID v4
+  `${CURRENT_YEAR}`      Year (4 digits)
+  `${CURRENT_MONTH}`     Month (2 digits)
+  `${CURRENT_DATE}`      Day (2 digits)
+  `${CURRENT_HOUR}`      Hour (2 digits)
+  `${CURRENT_MINUTE}`    Minute (2 digits)
+  `${CURRENT_SECOND}`    Second (2 digits)
+
+Example template: >yaml
+
+  ---
+  title: ${UUID}
+  created: ${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE}
+           T${CURRENT_HOUR}:${CURRENT_MINUTE}:${CURRENT_SECOND}
+  lastmod: ${CURRENT_YEAR}-${CURRENT_MONTH}-${CURRENT_DATE}
+           T${CURRENT_HOUR}:${CURRENT_MINUTE}:${CURRENT_SECOND}
+  url: null
+  type: permanent
+  tags:
+      - null
+  ---
+<
+
+==============================================================================
+11. GTD BOARD                                           *holon-gtd*
+
+The GTD board provides task management. Open with `:HolonGtd`.
+
+                                                        *holon-gtd-format*
+GTD Data Model ~
+
+GTD extends the note frontmatter with these fields:
+  `status`        Task status
+                  (inbox/todo/inprogress/waiting/delegate/done)
+  `target_date`   Due date (YYYY-MM-DD)
+  `start_date`    Start date (YYYY-MM-DD)
+  `blocked_by`    List of UUIDs that block this task
+
+Example frontmatter: >yaml
+
+  ---
+  title: Implement feature X
+  type: project
+  status: todo
+  target_date: 2025-06-01
+  start_date: 2025-05-01
+  blocked_by:
+      - uuid-of-blocking-task
+  tags:
+      - sprint-3
+  ---
+<
+
+                                                        *holon-gtd-views*
+GTD Views ~
+
+  `status`     Tasks grouped by status column
+  `horizon`    Tasks grouped by time horizon
+               (overdue/today/1w/2w/1m/2m/later)
+  `inbox`      Unprocessed tasks only
+  `done`       Completed tasks only
+
+                                                        *holon-gtd-keys*
+GTD Keybindings ~
+
+Navigation: ~
+  `j` / `k`            Move cursor
+  `<C-j>`              Focus preview panel
+  `<C-k>`              Focus tasks panel (from preview)
+
+Task operations: ~
+  `<CR>`               Open note in editor
+  `c`                  Change status (picker)
+  `p`                  Promote task (inbox) / Put marked tasks to status
+  `b`                  Set blocked_by dependencies
+  `t`                  Set target date (calendar picker)
+  `s`                  Set start date (calendar picker)
+  `a`                  Add new task
+  `dd`                 Delete task (inbox view)
+  `r`                  Restore done task
+  `<Tab>`              Toggle mark for batch operations
+
+View switching: ~
+  `H`                  Switch to horizon view
+  `D`                  Switch to done view
+  `I`                  Switch to inbox view
+
+Timeline: ~
+  `w`                  Week scale
+  `m`                  Month scale
+
+Display: ~
+  `g`                  Toggle preview panel
+  `q` / `<Esc>`        Close board
+
+==============================================================================
+12. IGNORING FILES                                      *holon-holonignore*
+
+Create a `.holonignore` file in your `notes_path` to exclude files and
+directories from search results. Uses the same syntax as `.gitignore`: >
+
+  .git/
+  .obsidian/
+  .foam/
+  .claude/
+  node_modules/
+<
+
+When `.holonignore` exists, it is used as the sole exclusion source for both
+`fd` (file discovery) and `rg` (content search). All default ignore behavior
+(`.gitignore`, hidden directories) is disabled to give you full control over
+what is included.
+
+If no `.holonignore` file exists, all files (including hidden ones) are
+searched with no ignore rules applied.
+
+==============================================================================
+13. LUA API                                             *holon-api*
+
+All modules are lazy-loaded via `require("holon")`.
+
+                                                        *holon.setup()*
+holon.setup({opts})
+  Initialize the plugin with user options. See |holon-configuration|.
+
+PICKERS                                                 *holon-api-pickers*
+
+  All picker functions accept an optional `opts` table.
+
+holon.pickers.notes({opts})                             *holon.pickers.notes()*
+  Open the notes picker. Accepts `tags` or `types` for filtering.
+
+holon.pickers.grep_notes({opts})                    *holon.pickers.grep_notes()*
+  Live grep through note contents.
+
+holon.pickers.backlinks({opts})                      *holon.pickers.backlinks()*
+  Show backlinks. `opts.uuid` and `opts.title` specify the target note.
+  If omitted, uses the current buffer. `opts.back` enables BS navigation
+  back to the previous picker state.
+
+holon.pickers.forward_links({opts})              *holon.pickers.forward_links()*
+  Show forward links from a note. `opts.filepath` specifies the source note.
+  If omitted, uses the current buffer. `opts.back` enables BS navigation.
+
+holon.pickers.indexes({opts})                          *holon.pickers.indexes()*
+  Browse index-type notes.
+
+holon.pickers.index_links({opts})                  *holon.pickers.index_links()*
+  Show notes linked from an index. Requires `opts.filepath`.
+
+holon.pickers.journal({opts})                          *holon.pickers.journal()*
+  Browse journal entries.
+
+holon.pickers.filter_tags({opts})                  *holon.pickers.filter_tags()*
+  Tag filter picker. Selecting a tag opens notes filtered by that tag.
+
+holon.pickers.filter_type({opts})                  *holon.pickers.filter_type()*
+  Type filter picker. Selecting a type opens notes filtered by that type.
+
+holon.pickers.templates({opts})                      *holon.pickers.templates()*
+  Template picker for creating new notes.
+
+holon.pickers.orphans({opts})                          *holon.pickers.orphans()*
+  Find orphan notes with no incoming or outgoing links.
+
+ACTIONS                                                 *holon-api-actions*
+
+holon.actions.create_note({template_path}, {title})
+                                                    *holon.actions.create_note()*
+  Create a new note from a template file. Returns the filepath or nil.
+
+  Parameters: ~
+    {template_path}  (string) Path to template file
+    {title}          (string|nil) Note title, uses UUID if nil
+
+holon.actions.follow_link_under_cursor({silent})
+                                    *holon.actions.follow_link_under_cursor()*
+  Follow the link at the current cursor position. Returns `true` if a link
+  was detected (even if the target file was not found).
+
+  Parameters: ~
+    {silent}  (boolean|nil) Suppress "no link found" notification
+
+holon.actions.smart_gd()                                *holon.actions.smart_gd()*
+  Follow link under cursor, falling back to LSP definition, then normal `gd`.
+
+holon.actions.insert_link({uuid}, {display_text})   *holon.actions.insert_link()*
+  Insert a link at the cursor position using the configured link format.
+
+holon.actions.create_journal_entry()        *holon.actions.create_journal_entry()*
+  Create today's journal entry or return existing one. Returns filepath.
+
+LINKS                                                   *holon-api-links*
+
+holon.links.extract_all_links({content})    *holon.links.extract_all_links()*
+  Extract all wiki and markdown links from content.
+  Returns a list of `{uuid, display_text, format}` tables.
+
+holon.links.generate_link({uuid}, {display_text}, {format})
+                                                    *holon.links.generate_link()*
+  Generate a formatted link string.
+
+  Parameters: ~
+    {uuid}          (string) Link target
+    {display_text}  (string) Display text
+    {format}        (string|nil) "wiki" or "markdown", uses config default
+
+holon.links.find_link_at_position({line}, {col})
+                                        *holon.links.find_link_at_position()*
+  Find the link target at a specific position in a line.
+
+  Parameters: ~
+    {line}  (string) Line content
+    {col}   (number) 0-indexed byte offset
+
+  Returns: ~
+    (string|nil) Link target, or nil if no link at position.
+
+holon.links.resolve_link_target({target}, {context_filepath})
+                                        *holon.links.resolve_link_target()*
+  Resolve a link target to a full file path. Handles UUIDs, filenames,
+  and relative paths.
+
+  Parameters: ~
+    {target}            (string) Link target
+    {context_filepath}  (string|nil) Current file for relative resolution
+
+  Returns: ~
+    (string|nil) Resolved absolute path, or nil if not found.
+
+holon.links.find_backlinks({identifier}, {notes_path})
+                                                    *holon.links.find_backlinks()*
+  Find all notes that link to a given identifier.
+
+  Parameters: ~
+    {identifier}  (string) UUID or filename to search for
+    {notes_path}  (string|nil) Search directory, uses config default
+
+FRONTMATTER                                             *holon-api-frontmatter*
+
+holon.frontmatter.parse({content})                  *holon.frontmatter.parse()*
+  Parse YAML frontmatter from a string. Returns a table.
+
+holon.frontmatter.parse_file({filepath})        *holon.frontmatter.parse_file()*
+  Parse frontmatter from a file. Returns a table.
+
+holon.frontmatter.get_title({fm})                  *holon.frontmatter.get_title()*
+  Get the title field from parsed frontmatter.
+
+holon.frontmatter.get_type({fm})                    *holon.frontmatter.get_type()*
+  Get the primary type from parsed frontmatter.
+
+holon.frontmatter.has_type({fm}, {note_type})      *holon.frontmatter.has_type()*
+  Check if frontmatter includes a specific type. Supports multi-type notes.
+
+holon.frontmatter.get_tags({fm})                    *holon.frontmatter.get_tags()*
+  Get the tags list from parsed frontmatter.
+
+holon.frontmatter.get_body({content})              *holon.frontmatter.get_body()*
+  Get the body content after frontmatter.
+
+GTD                                                     *holon-api-gtd*
+
+holon.gtd.open({opts})                                    *holon.gtd.open()*
+  Open the GTD board. Accepts an optional `opts` table.
+
+holon.gtd.close()                                        *holon.gtd.close()*
+  Close the GTD board.
+
+LINK BROWSER                                            *holon-api-link-browser*
+
+holon.link_browser.open({opts})                      *holon.link_browser.open()*
+  Open the link browser. Accepts an optional `opts` table.
+
+holon.link_browser.close()                          *holon.link_browser.close()*
+  Close the link browser.
+
+FILE SEARCH                                             *holon-api-file-search*
+
+holon.file_search.list_files({path}, {opts})    *holon.file_search.list_files()*
+  List files under the given path using fd.
+
+  Parameters: ~
+    {path}  (string) Directory to search
+    {opts}  (table|nil) Options (e.g., extension filter, ignore rules)
+
+  Returns: ~
+    (string[]) List of absolute file paths.
+
+holon.file_search.build_rg_args()              *holon.file_search.build_rg_args()*
+  Build the ripgrep argument list reflecting current ignore configuration.
+
+  Returns: ~
+    (string[]) List of rg arguments.
+
+CONFIG                                                  *holon-api-config*
+
+holon.config.get({key})                                 *holon.config.get()*
+  Get a configuration value. Supports dot notation
+  (e.g., `"picker.show_icons"`).
+
+holon.config.get_types()                           *holon.config.get_types()*
+  Get the sorted list of note types derived from `directories` keys
+  (excluding `journal`).
+
+  Returns: ~
+    (string[]) Sorted list of note type names.
+
+holon.config.get_directory({note_type})         *holon.config.get_directory()*
+  Get the full path to the directory for a note type.
+
+holon.config.get_templates_path()            *holon.config.get_templates_path()*
+  Get the full path to the templates directory.
+
+holon.config.get_icon({note_type})                   *holon.config.get_icon()*
+  Get the icon and highlight group for a note type.
+  Returns: (string) icon, (string) highlight_group.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:
