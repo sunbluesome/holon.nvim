@@ -261,13 +261,13 @@ function M.render_helpline(buf, state)
   local scale_label = state.timeline_scale == "w" and "w/m:month" or "w/m:week"
   local help
   if state.view_mode == "inbox" then
-    help = " j/k:select  C-j/k:panel  CR:open  p:promote  dd:delete  a:add  I:back  H:horizon  D:done  q:close"
+    help = " j/k:select  C-j/k:panel  CR:open  p:promote  dd:delete  a:add  l:link  I:back  H:horizon  D:done  q:close"
   elseif state.view_mode == "done" then
-    help = " j/k:select  C-j/k:panel  CR:open  r:restore  I:inbox  H:horizon  D:back  q:close"
+    help = " j/k:select  C-j/k:panel  CR:open  r:restore  l:link  I:inbox  H:horizon  D:back  q:close"
   elseif state.view_mode == "horizon" then
-    help = " j/k:select  C-j/k:panel  Tab:mark  p:move  b:block  CR:open  c:status  t:target  s:start  a:add  " .. scale_label .. "  g:preview  H:back  I:inbox  D:done  q:close"
+    help = " j/k:select  C-j/k:panel  Tab:mark  p:move  b:block  CR:open  c:status  t:target  s:start  a:add  l:link  " .. scale_label .. "  g:preview  H:back  I:inbox  D:done  q:close"
   else
-    help = " j/k:select  C-j/k:panel  Tab:mark  p:move  b:block  CR:open  c:status  t:target  s:start  a:add  " .. scale_label .. "  g:preview  H:horizon  I:inbox  D:done  q:close"
+    help = " j/k:select  C-j/k:panel  Tab:mark  p:move  b:block  CR:open  c:status  t:target  s:start  a:add  l:link  " .. scale_label .. "  g:preview  H:horizon  I:inbox  D:done  q:close"
   end
 
   utils.buf_set_lines(buf, { help })

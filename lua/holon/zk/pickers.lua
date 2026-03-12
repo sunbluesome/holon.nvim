@@ -296,6 +296,27 @@ function M.templates(opts)
   })
 end
 
+--- Insert link picker - find a note and insert its wikilink at the current cursor position
+---@param opts table|nil Options
+function M.insert_link_picker(opts)
+  opts = opts or {}
+  local raw = finders.find_notes(opts)
+  local entry_maker = make_entry.make_note_entry(opts)
+  local items = build_items(raw, entry_maker)
+
+  picker.open({
+    title = "Holon: Insert Link",
+    items = items,
+    format_item = format_item,
+    get_ordinal = function(item) return item.ordinal end,
+    on_select = function(item)
+      actions.insert_link(item.uuid, item.title)
+    end,
+    preview = file_preview,
+    helpline = " CR:insert link  q:close",
+  })
+end
+
 --- Backlinks picker - show notes that link to a specific note
 ---@param opts table|nil Options (uuid/identifier, or uses current buffer)
 function M.backlinks(opts)
@@ -418,6 +439,16 @@ function M.indexes(opts)
     end
   end
 
+  local insert_handler = function()
+    local sel = picker.get_selected()
+    if sel then
+      picker.close()
+      vim.schedule(function()
+        actions.insert_link(sel.uuid, sel.title)
+      end)
+    end
+  end
+
   picker.open({
     title = "Holon: Index Notes",
     items = items,
@@ -428,10 +459,10 @@ function M.indexes(opts)
     end,
     preview = file_preview,
     mappings = {
-      n = { ["<Tab>"] = tab_handler },
-      i = { ["<Tab>"] = tab_handler },
+      n = { ["<Tab>"] = tab_handler, ["l"] = insert_handler },
+      i = { ["<Tab>"] = tab_handler, ["<C-l>"] = insert_handler },
     },
-    helpline = " CR:open  Tab:links  q:close",
+    helpline = " CR:open  Tab:links  l:link  q:close",
   })
 end
 
@@ -450,6 +481,16 @@ function M.index_links(opts)
   local raw = finders.find_index_links(filepath, opts)
   local entry_maker = make_entry.make_index_link_entry(opts)
   local items = build_items(raw, entry_maker)
+
+  local insert_handler = function()
+    local sel = picker.get_selected()
+    if sel and sel.exists then
+      picker.close()
+      vim.schedule(function()
+        actions.insert_link(sel.uuid, sel.display_text_raw)
+      end)
+    end
+  end
 
   picker.open({
     title = "Holon: Links from " .. utils.truncate(title, 30),
@@ -470,9 +511,11 @@ function M.index_links(opts)
           picker.close()
           M.indexes()
         end,
+        ["l"] = insert_handler,
       },
+      i = { ["<C-l>"] = insert_handler },
     },
-    helpline = " CR:open  BS:back  q:close",
+    helpline = " CR:open  BS:back  l:link  q:close",
   })
 end
 
