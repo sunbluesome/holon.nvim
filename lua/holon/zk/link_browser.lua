@@ -222,7 +222,7 @@ local function render_helpline()
   local b = browser
   local depth = #b.state.history
   local back_label = depth > 0 and "-:back(" .. depth .. ")" or ""
-  local help = " j/k:select  b:backlinks  f:forward  t:tags  CR:dive  " .. back_label .. "  o:open  q:close"
+  local help = " j/k:select  b:backlinks  f:forward  t:tags  CR:dive  " .. back_label .. "  o:open  l:link  q:close"
 
   utils.buf_set_lines(b.bufs.helpline, { help })
 
@@ -413,6 +413,12 @@ function M.open(filepath)
   vim.keymap.set("n", "f", function() switch_mode("forward") end, opts)
   vim.keymap.set("n", "t", function() switch_mode("tags") end, opts)
   vim.keymap.set("n", "o", function() open_note() end, opts)
+  vim.keymap.set("n", "l", function()
+    M.close()
+    vim.schedule(function()
+      require("holon.zk.pickers").insert_link_picker()
+    end)
+  end, opts)
   vim.keymap.set("n", "q", function() M.close() end, opts)
   vim.keymap.set("n", "<Esc>", function() M.close() end, opts)
 

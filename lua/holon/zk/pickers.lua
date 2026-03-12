@@ -296,6 +296,27 @@ function M.templates(opts)
   })
 end
 
+--- Insert link picker - find a note and insert its wikilink at the current cursor position
+---@param opts table|nil Options
+function M.insert_link_picker(opts)
+  opts = opts or {}
+  local raw = finders.find_notes(opts)
+  local entry_maker = make_entry.make_note_entry(opts)
+  local items = build_items(raw, entry_maker)
+
+  picker.open({
+    title = "Holon: Insert Link",
+    items = items,
+    format_item = format_item,
+    get_ordinal = function(item) return item.ordinal end,
+    on_select = function(item)
+      actions.insert_link(item.uuid, item.title)
+    end,
+    preview = file_preview,
+    helpline = " CR:insert link  q:close",
+  })
+end
+
 --- Backlinks picker - show notes that link to a specific note
 ---@param opts table|nil Options (uuid/identifier, or uses current buffer)
 function M.backlinks(opts)

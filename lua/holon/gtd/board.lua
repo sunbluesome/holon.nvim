@@ -843,6 +843,14 @@ local function setup_keymaps(buf)
   -- Add task
   vim.keymap.set("n", "a", function() add_task() end, opts)
 
+  -- Insert link
+  vim.keymap.set("n", "l", function()
+    M.close()
+    vim.schedule(function()
+      require("holon.zk.pickers").insert_link_picker()
+    end)
+  end, opts)
+
   -- Timeline scale
   vim.keymap.set("n", "w", function() set_timeline_scale("w") end, opts)
   vim.keymap.set("n", "m", function() set_timeline_scale("m") end, opts)
