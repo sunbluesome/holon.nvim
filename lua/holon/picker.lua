@@ -473,9 +473,15 @@ function M.close()
     picker.debounce_timer:close()
   end
 
+  local origin_win = picker.origin_win
+
   utils.close_float_wins(picker.wins)
 
   picker = nil
+
+  if origin_win and vim.api.nvim_win_is_valid(origin_win) then
+    vim.api.nvim_set_current_win(origin_win)
+  end
 end
 
 --- Open a picker
@@ -491,6 +497,8 @@ end
 ---  dynamic_source: fn(query) -> table[] - dynamic item source (for grep)
 ---  helpline: string - help text
 function M.open(cfg)
+  local origin_win = vim.api.nvim_get_current_win()
+
   if picker then
     M.close()
   end
@@ -505,6 +513,7 @@ function M.open(cfg)
     cursor = 1,
     marked = {},
     bufs = {},
+    origin_win = origin_win,
     wins = {},
   }
 
