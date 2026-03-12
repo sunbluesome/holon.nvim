@@ -319,6 +319,8 @@ end
 --- Open the Link Browser
 ---@param filepath string|nil Starting file path (default: current buffer)
 function M.open(filepath)
+  local origin_win = vim.api.nvim_get_current_win()
+
   if browser then
     M.close()
   end
@@ -352,6 +354,7 @@ function M.open(filepath)
     bufs = {},
     wins = {},
     list_width = list_w,
+    origin_win = origin_win,
   }
 
   -- List panel (left)
@@ -437,9 +440,15 @@ end
 function M.close()
   if not browser then return end
 
+  local origin_win = browser.origin_win
+
   utils.close_float_wins(browser.wins)
 
   browser = nil
+
+  if origin_win and vim.api.nvim_win_is_valid(origin_win) then
+    vim.api.nvim_set_current_win(origin_win)
+  end
 end
 
 return M

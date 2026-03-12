@@ -885,6 +885,8 @@ end
 
 --- Open the GTD board
 function M.open()
+  local origin_win = vim.api.nvim_get_current_win()
+
   if board then
     M.close()
   end
@@ -893,6 +895,7 @@ function M.open()
   gtd_state.load(state)
 
   board = create_layout(state)
+  board.origin_win = origin_win
 
   -- Setup keymaps
   setup_keymaps(board.bufs.tasks)
@@ -913,9 +916,15 @@ function M.close()
     return
   end
 
+  local origin_win = board.origin_win
+
   utils.close_float_wins(board.wins)
 
   board = nil
+
+  if origin_win and vim.api.nvim_win_is_valid(origin_win) then
+    vim.api.nvim_set_current_win(origin_win)
+  end
 end
 
 return M
